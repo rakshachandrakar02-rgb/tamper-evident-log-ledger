@@ -1,0 +1,7 @@
+{
+  "com.whatsapp": ["INTERNET", "CAMERA", "RECORD_AUDIO", "READ_CONTACTS"],
+  "com.google.maps": ["INTERNET", "ACCESS_FINE_LOCATION"],
+  "com.example.flashlight": ["INTERNET", "CAMERA"],
+  "com.example.calculator": ["VIBRATE", "READ_SMS", "RECORD_AUDIO"],
+  "com.fake.freegame": ["INTERNET", "CAMERA", "READ_SMS", "ACCESS_BACKGROUND_LOCATION"]
+}

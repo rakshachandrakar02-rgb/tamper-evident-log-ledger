@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tamper-Evident Log Ledger</title>
+<style>
+:root{--bg:#f2f1ec;--ink:#1c2526;--mut:#667;--line:#d6d4cb;--ok:#1d6b4f;--bad:#b3261e;--card:#fbfaf6}
+@media(prefers-color-scheme:dark){:root{--bg:#161b1c;--ink:#e8e6df;--mut:#9aa;--line:#2e3638;--ok:#5fcf9f;--bad:#ff8a80;--card:#1d2425}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Georgia,serif}
+main{max-width:920px;margin:0 auto;padding:28px 18px}
+h1{font-size:1.7rem;margin:0 0 4px}
+p.sub{color:var(--mut);margin:0 0 22px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:4px}
+input{flex:1;min-width:160px}
+button{cursor:pointer}
+button.p{background:var(--ink);color:var(--bg)}
+#status{padding:16px;border-left:6px solid var(--line);background:var(--card);margin-bottom:20px}
+#status.ok{border-color:var(--ok)}
+#status.bad{border-color:var(--bad)}
+.blk{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line);padding:12px 14px;margin-bottom:10px;overflow-x:auto}
+.blk.bad{border-left-color:var(--bad)}
+.blk h3{margin:0 0 4px;font-size:1rem}
+code{font:12px ui-monospace,Menlo,monospace;color:var(--mut);word-break:break-all}
+.log{font-size:13px;margin:2px 0}
+.WARN,.ERROR{color:var(--bad)}
+</style>
+</head>
+<body>
+<main>
+<h1>Tamper-Evident Log Ledger</h1>
+<p class="sub">Every sealed batch of logs is hashed and chained. Edit one record and the chain shows where.</p>
+
+<div class="row">
+  <input id="key" placeholder="API key" type="password">
+  <input id="msg" placeholder="Log message, e.g. Failed password for root">
+  <select id="lvl"><option>INFO</option><option>WARN</option><option>ERROR</option></select>
+  <button class="p" onclick="send()">Add log</button>
+  <button onclick="seal()">Seal block now</button>
+</div>
+
+<div class="row">
+  <button class="p" onclick="verify()">Verify integrity</button>
+  {% if demo %}<button onclick="tamper()">Simulate attacker edit</button>{% endif %}
+  <span id="pend" class="sub" style="align-self:center;margin:0"></span>
+</div>
+
+<div id="status">Press "Verify integrity" to check the ledger.</div>
+<div id="chain"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let bad = new Set();
+const headers = () => ({'Content-Type':'application/json','X-API-Key':$('key').value});
+
+async function load() {
+  const d = await (await fetch('/api/chain')).json();
+  $('pend').textContent = d.pending + ' log(s) waiting to be sealed';
+  $('chain').innerHTML = d.blocks.slice().reverse().map(b => `
+    <div class="blk ${bad.has(b.idx) ? 'bad' : ''}">
+      <h3>Block ${b.idx} - ${new Date(b.ts * 1000).toLocaleString()}</h3>
+      <code>hash ${b.hash}<br>prev ${b.prev}<br>merkle ${b.root} | nonce ${b.nonce}</code>
+      ${b.logs.map(l => `<div class="log ${esc(l.level)}">[${esc(l.level)}] ${esc(l.source)}: ${esc(l.message)}</div>`).join('')}
+    </div>`).join('');
+}
+
+async function send() {
+  if (!$('msg').value) return;
+  const r = await fetch('/api/logs', {method:'POST', headers:headers(),
+    body: JSON.stringify({source:'dashboard', level:$('lvl').value, message:$('msg').value})});
+  if (r.status == 401) alert('Wrong or missing API key'); else $('msg').value = '';
+  load();
+}
+
+async function seal() {
+  const r = await fetch('/api/seal', {method:'POST', headers:headers()});
+  if (r.status == 401) alert('Wrong or missing API key');
+  load();
+}
+
+async function verify() {
+  const d = await (await fetch('/api/verify')).json();
+  const s = $('status');
+  bad = new Set(d.problems.map(p => p.block));
+  s.className = d.valid ? 'ok' : 'bad';
+  s.innerHTML = d.valid
+    ? '<b>Ledger intact.</b> All blocks match their hashes.'
+    : '<b>Tampering detected.</b><ul>' + d.problems.map(p => `<li>Block ${p.block ?? '?'}: ${esc(p.issue)}</li>`).join('') + '</ul>';
+  load();
+}
+
+async function tamper() {
+  const r = await fetch('/api/demo/tamper', {method:'POST'});
+  if (!r.ok) alert('Seal at least one block first.'); else verify();
+}
+
+load();
+</script>
+</main>
+</body>
+</html>
