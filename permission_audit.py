@@ -12,6 +12,21 @@ def adb(*args):
     return subprocess.run(["adb", *args], capture_output=True, text=True, check=True).stdout
 
 
+def parse_perms(dump):
+    """Works on Android 6+ (granted=true) and Android 5 and older (grantedPermissions:)."""
+    perms = set(re.findall(r"([\w.]+): granted=true", dump))
+    on = False
+    for line in dump.splitlines():
+        s = line.strip()
+        if s == "grantedPermissions:":
+            on = True
+        elif on and re.fullmatch(r"[\w.]+", s):
+            perms.add(s)
+        elif on and s:
+            on = False
+    return sorted(p.split(".")[-1] for p in perms)
+
+
 def scan(demo=False):
     """Return {package: [granted permissions]}.
     Demo mode reads fake_phone.json instead of a real phone."""
@@ -21,9 +36,7 @@ def scan(demo=False):
     pkgs = [l.split(":", 1)[1].strip() for l in out.splitlines() if l.startswith("package:")]
     result = {}
     for p in pkgs:
-        dump = adb("shell", "dumpsys", "package", p)
-        granted = set(re.findall(r"([\w.]+): granted=true", dump))
-        result[p] = sorted(g.split(".")[-1] for g in granted)
+        result[p] = parse_perms(adb("shell", "dumpsys", "package", p))
     return result
 
 
